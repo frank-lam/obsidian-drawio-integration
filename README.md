@@ -75,3 +75,8 @@ obsidian-drawio-integration/
 ## 开源协议
 
 MIT License
+
+
+## 效果图
+
+<img width="3840" height="1222" alt="image" src="https://github.com/user-attachments/assets/9d6ac82a-48a3-40f4-94ce-31615fd44bcb" />
