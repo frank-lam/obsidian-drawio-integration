@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-drawio-integration",
+  "name": "Drawio Integration",
+  "version": "1.0.0",
+  "minAppVersion": "0.9.12",
+  "description": "Create and edit Draw.io diagrams with SVG preview",
+  "author": "You",
+  "isDesktopOnly": true
+}
