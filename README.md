@@ -80,3 +80,12 @@ MIT License
 ## 效果图
 
 <img width="3840" height="1222" alt="image" src="https://github.com/user-attachments/assets/9d6ac82a-48a3-40f4-94ce-31615fd44bcb" />
+
+
+
+<img width="1920" height="958" alt="image" src="https://github.com/user-attachments/assets/fda9cece-a9da-482e-a4a6-f3e89f2ad794" />
+
+点击编辑后自动弹窗展示
+
+<img width="3840" height="1444" alt="image" src="https://github.com/user-attachments/assets/a26adce0-f198-43d9-9c13-179ae29c0954" />
+
