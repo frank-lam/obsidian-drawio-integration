@@ -8,7 +8,7 @@ const XML_SUFFIX = ".auto-create-drawio";
 const DRAWIO_TEMPLATE = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net" modified="now" agent="Obsidian" version="21.0.0">
   <diagram name="Page-1">
-    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="465" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -18,9 +18,9 @@ const DRAWIO_TEMPLATE = `<?xml version="1.0" encoding="UTF-8"?>
 </mxfile>`;
 
 const SVG_PLACEHOLDER = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="225" viewBox="0 0 400 225">
   <rect width="100%" height="100%" fill="#f5f5f5"/>
-  <text x="200" y="150" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#666">Click "Edit Drawio" to edit</text>
+  <text x="200" y="112.5" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#666">Click "Edit Drawio" to edit</text>
 </svg>`;
 
 class DrawioIntegration extends e.Plugin {
@@ -45,7 +45,45 @@ class DrawioIntegration extends e.Plugin {
             item
               .setTitle("Edit Drawio")
               .setIcon("pencil")
-              .onClick(() => this.editDrawio(file));
+              .onClick(async () => {
+                await this.editDrawio(file);
+              });
+          });
+
+          const xmlPath = file.path.replace(".svg", XML_SUFFIX + ".xml");
+          const hasXml = !!this.app.vault.getAbstractFileByPath(xmlPath);
+          const xmlFileName = file.basename + XML_SUFFIX + ".xml";
+          
+          menu.addItem((item) => {
+            item
+              .setTitle(hasXml ? "Delete Drawio (svg+xml)" : "Delete Drawio (svg only)")
+              .setIcon("trash")
+              .onClick(async () => {
+                if (hasXml) {
+                  const msg = `将删除 SVG 和 XML 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
+                  const confirmed = confirm(msg);
+                  if (!confirmed) return;
+                  const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
+                  if (xmlFile) {
+                    await this.app.vault.delete(xmlFile);
+                  }
+                }
+
+                const svgBaseName = file.basename;
+                const allFiles = this.app.vault.getFiles();
+                for (const mdFile of allFiles) {
+                  if (mdFile.extension === "md") {
+                    let content = await this.app.vault.read(mdFile);
+                    const originalContent = content;
+                    content = content.replace(new RegExp(`!\\[\\]\\([^\\)]*${svgBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.svg\\)`, 'g'), '');
+                    if (content !== originalContent) {
+                      await this.app.vault.modify(mdFile, content);
+                    }
+                  }
+                }
+
+                await this.app.vault.delete(file);
+              });
           });
         }
       })
@@ -70,13 +108,6 @@ class DrawioIntegration extends e.Plugin {
       })
     );
 
-    this.registerEvent(
-      this.app.vault.on("delete", (file) => {
-        if (file instanceof e.TFile && file.extension === "svg") {
-          this.handleSvgDelete(file);
-        }
-      })
-    );
   }
 
   async handleSvgRename(svgFile, oldPath) {
@@ -97,20 +128,6 @@ class DrawioIntegration extends e.Plugin {
     }
   }
 
-  async handleSvgDelete(svgFile) {
-    const xmlPath = svgFile.path.replace(".svg", XML_SUFFIX + ".xml");
-    const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
-    
-    if (xmlFile) {
-      try {
-        await this.app.vault.delete(xmlFile);
-        new e.Notice(`已删除关联的 XML 文件`);
-      } catch (err) {
-        console.error("删除XML失败:", err);
-      }
-    }
-  }
-
   startPolling(xmlFile, svgFile) {
     const basePath = this.app.vault.adapter.getBasePath();
     const xmlFullPath = basePath + "/" + xmlFile.path;
@@ -119,24 +136,27 @@ class DrawioIntegration extends e.Plugin {
       return;
     }
 
-    try {
-      const stats = fs.statSync(xmlFullPath);
-      this.lastModifiedTimes.set(xmlFile.path, stats.mtimeMs);
-    } catch (e) {}
+    fs.stat(xmlFullPath, (err, stats) => {
+      if (!err && stats) {
+        this.lastModifiedTimes.set(xmlFile.path, stats.mtimeMs);
+      }
+    });
 
-    const interval = setInterval(async () => {
-      try {
-        const stats = fs.statSync(xmlFullPath);
+    const interval = setInterval(() => {
+      fs.stat(xmlFullPath, async (err, stats) => {
+        if (err) {
+          clearInterval(interval);
+          this.pollIntervals.delete(xmlFile.path);
+          return;
+        }
+        
         const lastTime = this.lastModifiedTimes.get(xmlFile.path) || 0;
         
         if (stats.mtimeMs > lastTime) {
           this.lastModifiedTimes.set(xmlFile.path, stats.mtimeMs);
           await this.updateSvgFromXml(xmlFile, svgFile);
         }
-      } catch (e) {
-        clearInterval(interval);
-        this.pollIntervals.delete(xmlFile.path);
-      }
+      });
     }, 1000);
 
     this.pollIntervals.set(xmlFile.path, interval);
@@ -167,9 +187,20 @@ class DrawioIntegration extends e.Plugin {
         drawioCmd = `"${basePath}/draw.io.exe" -x -f svg -o "${svgFullPath}" "${xmlFullPath}"`;
       }
 
-      child_process.execSync(drawioCmd, { encoding: "utf8" });
+      await new Promise((resolve, reject) => {
+        child_process.exec(drawioCmd, { encoding: "utf8" }, (err, stdout, stderr) => {
+          if (err) reject(err);
+          else resolve(stdout);
+        });
+      });
 
-      const svgContent = fs.readFileSync(svgFullPath, "utf8");
+      const svgContent = await new Promise((resolve, reject) => {
+        fs.readFile(svgFullPath, "utf8", (err, data) => {
+          if (err) reject(err);
+          else resolve(data);
+        });
+      });
+      
       await this.app.vault.adapter.write(svgFile.path, svgContent);
 
       this.refreshSvgView(svgFile);
@@ -185,9 +216,14 @@ class DrawioIntegration extends e.Plugin {
     const svgPath = svgFile.path;
     
     setTimeout(() => {
-      const allLeaves = this.app.workspace.getLeaves();
+      let leaves = [];
+      if (Array.isArray(this.app.workspace.leaves)) {
+        leaves = this.app.workspace.leaves;
+      } else if (this.app.workspace.getLeaves) {
+        leaves = this.app.workspace.getLeaves();
+      }
       
-      for (const leaf of allLeaves) {
+      for (const leaf of leaves) {
         const container = leaf.containerEl;
         if (!container) continue;
         
@@ -252,8 +288,10 @@ class DrawioIntegration extends e.Plugin {
     const assetsFolderPath = folder.path === "/" ? "/assets" : `${folder.path}/assets`;
     
     let assetsFolder = this.app.vault.getAbstractFileByPath(assetsFolderPath);
-    if (!assetsFolder) {
-      await this.app.vault.createFolder(assetsFolderPath);
+    if (!assetsFolder || !(assetsFolder instanceof e.TFolder)) {
+      try {
+        await this.app.vault.createFolder(assetsFolderPath);
+      } catch (e) {}
       assetsFolder = this.app.vault.getAbstractFileByPath(assetsFolderPath);
     }
     
@@ -303,54 +341,55 @@ class DrawioIntegration extends e.Plugin {
     const isMac = process.platform === "darwin";
     const isLinux = process.platform === "linux";
     
-    let cmd;
+    const tryPaths = async (paths) => {
+      for (const path of paths) {
+        const cmd = `${path} "${xmlPath}"`;
+        try {
+          await new Promise((resolve, reject) => {
+            child_process.exec(cmd, { stdio: "ignore" }, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          return true;
+        } catch (e) {
+          continue;
+        }
+      }
+      return false;
+    };
     
-    if (isMac) {
-      const paths = [
-        '"/Applications/draw.io.app/Contents/MacOS/draw.io"',
-        '"/Applications/Diagrams.net.app/Contents/MacOS/draw.io"',
-        'open -a "draw.io"',
-        'open -a "Diagrams.net"'
-      ];
-      
-      for (const path of paths) {
-        cmd = `${path} "${xmlPath}"`;
-        try {
-          child_process.execSync(cmd, { stdio: "ignore" });
-          return;
-        } catch (e) {
-          continue;
+    (async () => {
+      if (isMac) {
+        const paths = [
+          '"/Applications/draw.io.app/Contents/MacOS/draw.io"',
+          '"/Applications/Diagrams.net.app/Contents/MacOS/draw.io"',
+          'open -a "draw.io"',
+          'open -a "Diagrams.net"'
+        ];
+        
+        const success = await tryPaths(paths);
+        if (!success) {
+          const cmd = `open "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
+          child_process.exec(cmd);
+        }
+      } else if (isLinux) {
+        const cmd = `drawio "${xmlPath}" || diagramsnet "${xmlPath}"`;
+        child_process.exec(cmd);
+      } else {
+        const paths = [
+          `"${process.env.LOCALAPPDATA}\\draw.io\\draw.io.exe"`,
+          `"${process.env.PROGRAMFILES}\\draw.io\\draw.io.exe"`,
+          "drawio"
+        ];
+        
+        const success = await tryPaths(paths);
+        if (!success) {
+          const cmd = `start "" "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
+          child_process.exec(cmd);
         }
       }
-      
-      cmd = `open "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
-    } else if (isLinux) {
-      cmd = `drawio "${xmlPath}" || diagramsnet "${xmlPath}"`;
-    } else {
-      const paths = [
-        `"${process.env.LOCALAPPDATA}\\draw.io\\draw.io.exe"`,
-        `"${process.env.PROGRAMFILES}\\draw.io\\draw.io.exe"`,
-        "drawio"
-      ];
-      
-      for (const path of paths) {
-        cmd = `${path} "${xmlPath}"`;
-        try {
-          child_process.execSync(cmd, { stdio: "ignore" });
-          return;
-        } catch (e) {
-          continue;
-        }
-      }
-      
-      cmd = `start "" "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
-    }
-
-    child_process.exec(cmd, (error) => {
-      if (error) {
-        console.log("Failed to open Draw.io:", error.message);
-      }
-    });
+    })();
   }
 
   async onunload() {
