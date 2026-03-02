@@ -1,5 +1,7 @@
 # Obsidian Drawio Integration
 
+中文 | [English](./README_EN.md)
+
 在 Obsidian 中创建和编辑 Draw.io 图表，支持 SVG 预览和自动刷新。
 
 ## 功能特性
