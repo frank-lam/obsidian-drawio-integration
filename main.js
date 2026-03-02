@@ -180,19 +180,25 @@ class DrawioIntegration extends e.Plugin {
     try {
       const isMac = process.platform === "darwin";
       let drawioCmd = "";
+      let drawioArgs = [];
       
       if (isMac) {
-        drawioCmd = `"/Applications/draw.io.app/Contents/MacOS/draw.io" -x -f svg -o "${svgFullPath}" "${xmlFullPath}"`;
+        drawioCmd = "/Applications/draw.io.app/Contents/MacOS/draw.io";
+        drawioArgs = ["-x", "-f", "svg", "-o", svgFullPath, xmlFullPath];
       } else {
-        drawioCmd = `"${basePath}/draw.io.exe" -x -f svg -o "${svgFullPath}" "${xmlFullPath}"`;
+        drawioCmd = basePath + "/draw.io.exe";
+        drawioArgs = ["-x", "-f", "svg", "-o", svgFullPath, xmlFullPath];
       }
 
-      await new Promise((resolve, reject) => {
-        child_process.exec(drawioCmd, { encoding: "utf8" }, (err, stdout, stderr) => {
-          if (err) reject(err);
-          else resolve(stdout);
-        });
+      const child = child_process.spawn(drawioCmd, drawioArgs, {
+        detached: true,
+        stdio: 'ignore',
+        cwd: basePath
       });
+      
+      child.unref();
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const svgContent = await new Promise((resolve, reject) => {
         fs.readFile(svgFullPath, "utf8", (err, data) => {
@@ -332,58 +338,89 @@ class DrawioIntegration extends e.Plugin {
 
     const basePath = this.app.vault.adapter.getBasePath();
     const xmlFullPath = basePath + "/" + xmlFile.path;
+    const bkpFullPath = xmlFullPath + ".bkp";
     
     this.startPolling(xmlFile, svgFile);
-    this.openDrawioDesktop(xmlFullPath);
+    this.openDrawioDesktop(xmlFullPath, bkpFullPath);
   }
 
-  openDrawioDesktop(xmlPath) {
+  openDrawioDesktop(xmlPath, bkpPath) {
     const isMac = process.platform === "darwin";
     const isLinux = process.platform === "linux";
-    
-    const tryPaths = async (paths) => {
-      for (const path of paths) {
-        const cmd = `${path} "${xmlPath}"`;
+    const fs = require('fs');
+
+    const cleanupBkp = () => {
+      if (bkpPath && fs.existsSync(bkpPath)) {
         try {
-          await new Promise((resolve, reject) => {
-            child_process.exec(cmd, { stdio: "ignore" }, (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
-          return true;
+          fs.unlinkSync(bkpPath);
+          console.log("Deleted bkp file:", bkpPath);
         } catch (e) {
-          continue;
+          console.error("Failed to delete bkp:", e);
         }
       }
-      return false;
+    };
+
+    const runDrawio = async (cmd, args) => {
+      return new Promise((resolve) => {
+        const child = child_process.spawn(cmd, args, {
+          detached: true,
+          stdio: 'ignore'
+        });
+        child.unref();
+        child.on('close', () => {
+          cleanupBkp();
+          resolve();
+        });
+      });
     };
     
     (async () => {
       if (isMac) {
-        const paths = [
-          '"/Applications/draw.io.app/Contents/MacOS/draw.io"',
-          '"/Applications/Diagrams.net.app/Contents/MacOS/draw.io"',
-          'open -a "draw.io"',
-          'open -a "Diagrams.net"'
+        const appPaths = [
+          "/Applications/draw.io.app/Contents/MacOS/draw.io",
+          "/Applications/Diagrams.net.app/Contents/MacOS/draw.io"
         ];
         
-        const success = await tryPaths(paths);
+        let success = false;
+        for (const appPath of appPaths) {
+          if (fs.existsSync(appPath)) {
+            try {
+              await runDrawio(appPath, [xmlPath]);
+              success = true;
+              break;
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+        
         if (!success) {
           const cmd = `open "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
           child_process.exec(cmd);
         }
       } else if (isLinux) {
         const cmd = `drawio "${xmlPath}" || diagramsnet "${xmlPath}"`;
-        child_process.exec(cmd);
+        child_process.exec(cmd, cleanupBkp);
       } else {
         const paths = [
-          `"${process.env.LOCALAPPDATA}\\draw.io\\draw.io.exe"`,
-          `"${process.env.PROGRAMFILES}\\draw.io\\draw.io.exe"`,
+          `${process.env.LOCALAPPDATA}\\draw.io\\draw.io.exe`,
+          `${process.env.PROGRAMFILES}\\draw.io\\draw.io.exe`,
           "drawio"
         ];
         
-        const success = await tryPaths(paths);
+        let success = false;
+        for (const exePath of paths) {
+          if (fs.existsSync(exePath)) {
+            try {
+              await runDrawio(exePath, [xmlPath]);
+              success = true;
+              break;
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+        
         if (!success) {
           const cmd = `start "" "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
           child_process.exec(cmd);
