@@ -15,15 +15,20 @@
 - 支持 Mac/Windows/Linux
 - 自动检测 Draw.io 安装路径
 
-### 3. 自动刷新
+### 3. 右键删除图表
+- 在 SVG 文件上右键 → `Delete Drawio`
+- 同时删除 SVG 和关联的 XML 文件
+- 自动清理 Markdown 文件中对该 SVG 的引用
+
+### 4. 自动刷新
 - 在 Draw.io 中保存后，Obsidian 自动将 XML 转换为 SVG
 - SVG 预览自动刷新，无需手动刷新
 
-### 4. 文件同步
+### 5. 文件同步
 - 重命名 SVG 时，关联的 XML 自动重命名
 - 删除 SVG 时，关联的 XML 自动删除
 
-### 5. 快速插入
+### 6. 快速插入
 - 在 Markdown 编辑器中右键 → `Insert New Drawio`
 - 在当前光标位置创建图表
 - 文件保存在 `./assets` 目录（自动创建）
@@ -31,9 +36,11 @@
 
 ## 使用前提
 
-- 安装 [Draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases)（非在线版）
-- Mac 用户：安装 `/Applications/draw.io.app`
-- Windows 用户：安装 draw.io.exe
+- 推荐安装 [Draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases)（非在线版）
+- Mac 用户：安装到 `/Applications/draw.io.app` 或 `/Applications/Diagrams.net.app`
+- Windows 用户：安装到 `%LOCALAPPDATA%\draw.io\draw.io.exe`
+- Linux 用户：安装 `drawio` 或 `diagramsnet`
+- 如未安装 Draw.io 桌面版，将自动打开浏览器在线编辑
 
 ## 安装方法
 
@@ -66,13 +73,14 @@ obsidian-drawio-integration/
 |------|----------|------|
 | 新建图表 | 文件夹右键 → New Drawio | 创建 SVG + XML |
 | 编辑图表 | SVG 右键 → Edit Drawio | 用 Draw.io 打开 |
+| 删除图表 | SVG 右键 → Delete Drawio | 删除 SVG + XML |
 | 插入图表 | 编辑器右键 → Insert New Drawio | 光标处插入 |
 
 ## 注意事项
 
-- 仅支持 Draw.io 桌面版，不支持在线版
 - XML 文件使用 `.auto-create-drawio.xml` 后缀标记
-- 编辑器内插入的图表保存在 `./assets` 目录
+- 编辑器内插入的图表保存在当前目录的 `./assets` 文件夹
+- 如未安装 Draw.io 桌面版，将自动使用浏览器在线编辑
 
 ## 开源协议
 

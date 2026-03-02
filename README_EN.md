@@ -15,15 +15,20 @@ Create and edit Draw.io diagrams in Obsidian with SVG preview and auto-refresh.
 - Supports Mac/Windows/Linux
 - Automatically detects Draw.io installation path
 
-### 3. Auto-Refresh
+### 3. Right-Click to Delete Diagram
+- Right-click on SVG file → `Delete Drawio`
+- Deletes both SVG and associated XML files
+- Automatically cleans up SVG references in Markdown files
+
+### 4. Auto-Refresh
 - After saving in Draw.io, Obsidian automatically converts XML to SVG
 - SVG preview refreshes automatically without manual refresh
 
-### 4. File Sync
+### 5. File Sync
 - When renaming SVG, the associated XML is automatically renamed
 - When deleting SVG, the associated XML is automatically deleted
 
-### 5. Quick Insert
+### 6. Quick Insert
 - Right-click in Markdown editor → `Insert New Drawio`
 - Creates diagram at current cursor position
 - Files saved in `./assets` directory (auto-created)
@@ -31,9 +36,11 @@ Create and edit Draw.io diagrams in Obsidian with SVG preview and auto-refresh.
 
 ## Prerequisites
 
-- Install [Draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases) (not the online version)
-- Mac users: Install to `/Applications/draw.io.app`
-- Windows users: Install draw.io.exe
+- Recommended: Install [Draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases) (not the online version)
+- Mac users: Install to `/Applications/draw.io.app` or `/Applications/Diagrams.net.app`
+- Windows users: Install to `%LOCALAPPDATA%\draw.io\draw.io.exe`
+- Linux users: Install `drawio` or `diagramsnet`
+- If Draw.io desktop is not installed, browser-based online editor will be opened automatically
 
 ## Installation
 
@@ -66,13 +73,14 @@ obsidian-drawio-integration/
 |--------|---------|-------------|
 | New Diagram | Folder right-click → New Drawio | Creates SVG + XML |
 | Edit Diagram | SVG right-click → Edit Drawio | Opens in Draw.io |
+| Delete Diagram | SVG right-click → Delete Drawio | Deletes SVG + XML |
 | Insert Diagram | Editor right-click → Insert New Drawio | Inserts at cursor |
 
 ## Notes
 
-- Only supports Draw.io desktop version, not the online version
 - XML files use `.auto-create-drawio.xml` suffix as marker
-- Diagrams inserted in editor are saved in `./assets` directory
+- Diagrams inserted in editor are saved in `./assets` folder in the current directory
+- If Draw.io desktop is not installed, browser-based online editor will be used
 
 ## License
 
