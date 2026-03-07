@@ -4,7 +4,7 @@ const pathUtil = require("path");
 var child_process = require("child_process");
 var fs = require("fs");
 
-const XML_SUFFIX = ".auto-create-drawio";
+const XML_SUFFIX = ".auto-create";
 
 const DRAWIO_TEMPLATE = `<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net" modified="now" agent="Obsidian" version="21.0.0">
@@ -73,17 +73,17 @@ class DrawioIntegration extends e.Plugin {
               });
           });
 
-          const xmlPath = file.path.replace(".svg", XML_SUFFIX + ".xml");
+          const xmlPath = file.path.replace(".svg", XML_SUFFIX + ".drawio");
           const hasXml = !!this.app.vault.getAbstractFileByPath(xmlPath);
-          const xmlFileName = file.basename + XML_SUFFIX + ".xml";
+          const xmlFileName = file.basename + XML_SUFFIX + ".drawio";
           
           menu.addItem((item) => {
             item
-              .setTitle(hasXml ? "Delete Drawio (svg+xml)" : "Delete Drawio (svg only)")
+              .setTitle(hasXml ? "Delete Drawio (svg + drawio)" : "Delete Drawio (svg only)")
               .setIcon("trash")
               .onClick(async () => {
                 if (hasXml) {
-                  const msg = `将删除 SVG 和 XML 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
+                  const msg = `将删除 SVG 和 drawio 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
                   const confirmed = confirm(msg);
                   if (!confirmed) return;
                   const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
@@ -138,11 +138,44 @@ class DrawioIntegration extends e.Plugin {
     const newPath = svgFile.path;
     
     // Calculate old and new XML paths correctly
-    const oldXmlPath = oldPath.replace(/\.svg$/i, XML_SUFFIX + ".xml");
-    const newXmlPath = newPath.replace(/\.svg$/i, XML_SUFFIX + ".xml");
+    const oldXmlPath = oldPath.replace(/\.svg$/i, XML_SUFFIX + ".drawio");
+    const newXmlPath = newPath.replace(/\.svg$/i, XML_SUFFIX + ".drawio");
     
     console.log(`[Drawio] handleSvgRename: oldPath=${oldPath}, newPath=${newPath}`);
     console.log(`[Drawio] handleSvgRename: oldXmlPath=${oldXmlPath}, newXmlPath=${newXmlPath}`);
+    
+    // Check if target XML file already exists (would cause conflict)
+    const newXmlFileExists = this.app.vault.getAbstractFileByPath(newXmlPath);
+    if (newXmlFileExists) {
+      new e.Notice(`无法重命名: 已存在 ${newBaseName}${XML_SUFFIX}.drawio 文件，请先删除或重命名该文件`);
+      console.log(`[Drawio] Conflict: reverting SVG rename via fs`);
+      
+      // Use filesystem to revert the rename immediately
+      try {
+        const basePath = this.app.vault.adapter.getBasePath();
+        const oldFullPath = basePath + "/" + newPath;
+        const newFullPath = basePath + "/" + oldPath;
+        fs.renameSync(oldFullPath, newFullPath);
+        new e.Notice(`已恢复 SVG 文件名`);
+        
+        // Also revert markdown references
+        const oldFileName = oldPath.split('/').pop();
+        const newFileName = newPath.split('/').pop();
+        const allFiles = this.app.vault.getFiles();
+        for (const mdFile of allFiles) {
+          if (mdFile.extension === "md") {
+            let content = await this.app.vault.read(mdFile);
+            // Replace new filename with old filename in markdown
+            content = content.replace(newFileName, oldFileName);
+            await this.app.vault.modify(mdFile, content);
+          }
+        }
+        return;
+      } catch (err) {
+        console.error("恢复SVG文件名失败:", err);
+      }
+      return;
+    }
     
     const oldXmlFile = this.app.vault.getAbstractFileByPath(oldXmlPath);
     const newXmlFile = this.app.vault.getAbstractFileByPath(newXmlPath);
@@ -150,7 +183,7 @@ class DrawioIntegration extends e.Plugin {
     if (oldXmlFile && !newXmlFile) {
       try {
         await this.app.vault.rename(oldXmlFile, newXmlPath);
-        new e.Notice(`重命名 XML: ${oldXmlFile.name} → ${newBaseName}${XML_SUFFIX}.xml`);
+        new e.Notice(`重命名 XML: ${oldXmlFile.name} → ${newBaseName}${XML_SUFFIX}.drawio`);
       } catch (err) {
         console.error("重命名XML失败:", err);
       }
@@ -348,12 +381,12 @@ class DrawioIntegration extends e.Plugin {
     const baseName = `drawio-${timestamp}`;
     
     const svgPath = folder.path === "/" ? `/${baseName}.svg` : `${folder.path}/${baseName}.svg`;
-    const xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.xml` : `${folder.path}/${baseName}${XML_SUFFIX}.xml`;
+    const xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.drawio` : `${folder.path}/${baseName}${XML_SUFFIX}.drawio`;
     
     await this.app.vault.create(svgPath, SVG_PLACEHOLDER);
     await this.app.vault.create(xmlPath, DRAWIO_TEMPLATE);
     
-    new e.Notice(`Created ${baseName}.svg and ${baseName}${XML_SUFFIX}.xml`);
+    new e.Notice(`Created ${baseName}.svg and ${baseName}${XML_SUFFIX}.drawio`);
   }
 
   async insertNewDrawioAtCursor(mdFile, editor) {
@@ -380,7 +413,7 @@ class DrawioIntegration extends e.Plugin {
     }
     
     const svgPath = `${assetsFolderPath}/${baseName}.svg`;
-    const xmlPath = `${assetsFolderPath}/${baseName}${XML_SUFFIX}.xml`;
+    const xmlPath = `${assetsFolderPath}/${baseName}${XML_SUFFIX}.drawio`;
     
     await this.app.vault.create(svgPath, SVG_PLACEHOLDER);
     await this.app.vault.create(xmlPath, DRAWIO_TEMPLATE);
@@ -396,7 +429,7 @@ class DrawioIntegration extends e.Plugin {
   async editDrawio(svgFile) {
     const baseName = svgFile.basename;
     const folder = svgFile.parent;
-    let xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.xml` : `${folder.path}/${baseName}${XML_SUFFIX}.xml`;
+    let xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.drawio` : `${folder.path}/${baseName}${XML_SUFFIX}.drawio`;
     
     console.log(`[Drawio] editDrawio: svgFile.path=${svgFile.path}, baseName=${baseName}, folder.path=${folder.path}, xmlPath=${xmlPath}`);
     
@@ -406,7 +439,7 @@ class DrawioIntegration extends e.Plugin {
       // Try to find the xml file by scanning vault files
       console.log(`[Drawio] xml not found at ${xmlPath}, scanning vault...`);
       const allFiles = this.app.vault.getFiles();
-      const xmlFileName = baseName + XML_SUFFIX + ".xml";
+      const xmlFileName = baseName + ".drawio";
       for (const f of allFiles) {
         if (f.name === xmlFileName && f.extension === "xml") {
           console.log(`[Drawio] Found xml file by name: ${f.path}`);
