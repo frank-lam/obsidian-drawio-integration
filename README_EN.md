@@ -7,8 +7,8 @@ Create and edit Draw.io diagrams in Obsidian with SVG preview and auto-refresh.
 ## Features
 
 ### 1. Right-Click to Create Diagram
-- Right-click on a folder → `New Drawio` to create SVG + XML file pair
-- XML files use `.auto-create-drawio.xml` suffix to avoid conflicts with regular XML files
+- Right-click on a folder → `New Drawio` to create SVG + drawio file pair
+- drawio files use `.auto-create.drawio` suffix to avoid conflicts with regular files
 
 ### 2. Right-Click to Edit Diagram
 - Right-click on SVG file → `Edit Drawio` to open with Draw.io desktop app
@@ -16,8 +16,8 @@ Create and edit Draw.io diagrams in Obsidian with SVG preview and auto-refresh.
 - Automatically detects Draw.io installation path
 
 ### 3. Right-Click to Delete Diagram
-- Right-click on SVG file → `Delete Drawio`
-- Deletes both SVG and associated XML files
+- Right-click on SVG file → `Delete Drawio (svg + drawio)` or `Delete Drawio (svg only)`
+- Deletes both SVG and associated drawio files
 - Automatically cleans up SVG references in Markdown files
 
 ### 4. Auto-Refresh
@@ -25,8 +25,9 @@ Create and edit Draw.io diagrams in Obsidian with SVG preview and auto-refresh.
 - SVG preview refreshes automatically without manual refresh
 
 ### 5. File Sync
-- When renaming SVG, the associated XML is automatically renamed
-- When deleting SVG, the associated XML is automatically deleted
+- When renaming SVG, the associated drawio is automatically renamed
+- When deleting SVG, the associated drawio is automatically deleted
+- If renaming would cause conflict (e.g., same-named drawio exists), user is prompted and rename is blocked
 
 ### 6. Quick Insert
 - Right-click in Markdown editor → `Insert New Drawio`
@@ -71,14 +72,14 @@ obsidian-drawio-integration/
 
 | Action | Trigger | Description |
 |--------|---------|-------------|
-| New Diagram | Folder right-click → New Drawio | Creates SVG + XML |
+| New Diagram | Folder right-click → New Drawio | Creates SVG + drawio |
 | Edit Diagram | SVG right-click → Edit Drawio | Opens in Draw.io |
-| Delete Diagram | SVG right-click → Delete Drawio | Deletes SVG + XML |
+| Delete Diagram | SVG right-click → Delete Drawio | Deletes SVG + drawio |
 | Insert Diagram | Editor right-click → Insert New Drawio | Inserts at cursor |
 
 ## Notes
 
-- XML files use `.auto-create-drawio.xml` suffix as marker
+- drawio files use `.auto-create.drawio` suffix as marker
 - Diagrams inserted in editor are saved in `./assets` folder in the current directory
 - If Draw.io desktop is not installed, browser-based online editor will be used
 

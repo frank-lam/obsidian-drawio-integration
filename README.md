@@ -7,8 +7,8 @@
 ## 功能特性
 
 ### 1. 右键创建图表
-- 在文件夹上右键 → `New Drawio` 创建 SVG + XML 文件对
-- XML 文件使用 `.auto-create-drawio.xml` 后缀，避免与普通 XML 文件冲突
+- 在文件夹上右键 → `New Drawio` 创建 SVG + drawio 文件对
+- drawio 文件使用 `.auto-create.drawio` 后缀，避免与普通文件冲突
 
 ### 2. 右键编辑图表
 - 在 SVG 文件上右键 → `Edit Drawio` 用 Draw.io 桌面版打开
@@ -16,8 +16,8 @@
 - 自动检测 Draw.io 安装路径
 
 ### 3. 右键删除图表
-- 在 SVG 文件上右键 → `Delete Drawio`
-- 同时删除 SVG 和关联的 XML 文件
+- 在 SVG 文件上右键 → `Delete Drawio (svg + drawio)` 或 `Delete Drawio (svg only)`
+- 同时删除 SVG 和关联的 drawio 文件
 - 自动清理 Markdown 文件中对该 SVG 的引用
 
 ### 4. 自动刷新
@@ -25,8 +25,9 @@
 - SVG 预览自动刷新，无需手动刷新
 
 ### 5. 文件同步
-- 重命名 SVG 时，关联的 XML 自动重命名
-- 删除 SVG 时，关联的 XML 自动删除
+- 重命名 SVG 时，关联的 drawio 自动重命名
+- 删除 SVG 时，关联的 drawio 自动删除
+- 如果重命名会导致冲突（如已存在同名 drawio），会提示用户并阻止重命名
 
 ### 6. 快速插入
 - 在 Markdown 编辑器中右键 → `Insert New Drawio`
@@ -71,14 +72,14 @@ obsidian-drawio-integration/
 
 | 操作 | 触发方式 | 说明 |
 |------|----------|------|
-| 新建图表 | 文件夹右键 → New Drawio | 创建 SVG + XML |
+| 新建图表 | 文件夹右键 → New Drawio | 创建 SVG + drawio |
 | 编辑图表 | SVG 右键 → Edit Drawio | 用 Draw.io 打开 |
-| 删除图表 | SVG 右键 → Delete Drawio | 删除 SVG + XML |
+| 删除图表 | SVG 右键 → Delete Drawio | 删除 SVG + drawio |
 | 插入图表 | 编辑器右键 → Insert New Drawio | 光标处插入 |
 
 ## 注意事项
 
-- XML 文件使用 `.auto-create-drawio.xml` 后缀标记
+- drawio 文件使用 `.auto-create.drawio` 后缀标记
 - 编辑器内插入的图表保存在当前目录的 `./assets` 文件夹
 - 如未安装 Draw.io 桌面版，将自动使用浏览器在线编辑
 
