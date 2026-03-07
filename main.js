@@ -278,6 +278,9 @@ class DrawioIntegration extends e.Plugin {
       
       await this.app.vault.adapter.write(svgFile.path, svgContent);
 
+      // Wait for file to be fully written before refreshing
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       this.refreshSvgView(svgFile);
       
       new e.Notice("SVG updated!");
@@ -289,8 +292,59 @@ class DrawioIntegration extends e.Plugin {
 
   refreshSvgView(svgFile) {
     const svgPath = svgFile.path;
+    const svgPathNormal = svgPath.replace(/\\/g, '/');
+    const svgFileName = svgPath.split('/').pop().replace(/\\/g, '');
     
+    // Wait a bit for file system to settle, then refresh
     setTimeout(() => {
+      // Find all markdown files that embed this SVG and refresh them
+      try {
+        const mdFiles = this.app.vault.getMarkdownFiles();
+        for (const mdFile of mdFiles) {
+          const cache = this.app.metadataCache.getCache(mdFile.path);
+          if (cache && cache.embeds) {
+            for (const embed of cache.embeds) {
+              if (embed.link && embed.link.toLowerCase().includes(svgFileName.toLowerCase())) {
+                console.log("Found markdown file embedding SVG:", mdFile.path);
+                // Refresh this markdown file's leaves
+                const leaves = this.app.workspace.getLeavesOfType(mdFile);
+                for (const leaf of leaves) {
+                  if (leaf.rebuildView) {
+                    try {
+                      leaf.rebuildView();
+                      console.log("Refreshed leaf for:", mdFile.path);
+                    } catch (e) {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log("Error finding embedding files:", e);
+      }
+      
+      // Invalidate metadata cache for this file
+      try {
+        const cachedMetadata = this.app.metadataCache.getCache(svgPath);
+        if (cachedMetadata) {
+          this.app.metadataCache.unloadCache(svgPath);
+          this.app.metadataCache.trigger(svgPath, 'changed');
+          console.log("Invalidated metadata cache for:", svgPath);
+        }
+      } catch (e) {
+        console.log("Metadata cache invalidation error:", e);
+      }
+      
+      // Force reload the file
+      try {
+        this.app.vault.loadRaw(svgPath).then(() => {
+          console.log("Reloaded raw file:", svgPath);
+        });
+      } catch (e) {
+        console.log("Load raw error:", e);
+      }
+      
       // Method 1: Use activeLeaf.rebuildView() like Refresh Any View plugin
       try {
         const activeLeaf = this.app.workspace.activeLeaf;
@@ -345,7 +399,7 @@ class DrawioIntegration extends e.Plugin {
             const src = img.getAttribute('src');
             if (src) {
               const decodedSrc = decodeURIComponent(src);
-              if (decodedSrc.includes(svgPath) || decodedSrc.includes(svgPath.replace(/\//g, '\\'))) {
+              if (decodedSrc.includes(svgPathNormal) || decodedSrc.includes(svgPath)) {
                 const separator = src.includes("?") ? "&" : "?";
                 const baseUrl = src.split("?")[0];
                 img.src = baseUrl + separator + "v=" + Date.now();
@@ -354,6 +408,22 @@ class DrawioIntegration extends e.Plugin {
             }
           } catch (e) {
             // ignore
+          }
+        });
+        
+        // Also refresh inline SVGs
+        const svgs = container.querySelectorAll('svg');
+        svgs.forEach(svg => {
+          const dataSrc = svg.getAttribute('data-src') || svg.getAttribute('src');
+          if (dataSrc) {
+            const decodedSrc = decodeURIComponent(dataSrc);
+            if (decodedSrc.includes(svgPathNormal) || decodedSrc.includes(svgPath)) {
+              const separator = dataSrc.includes("?") ? "&" : "?";
+              const baseUrl = dataSrc.split("?")[0];
+              svg.setAttribute('src', baseUrl + separator + "v=" + Date.now());
+              svg.setAttribute('data-src', baseUrl + separator + "v=" + Date.now());
+              console.log("Refreshed inline svg");
+            }
           }
         });
       }
@@ -365,7 +435,29 @@ class DrawioIntegration extends e.Plugin {
       } catch (e) {
         console.log("updateOptions error:", e);
       }
-    }, 500);
+      
+      // Method 5: Use iterateAllLeaves like Refresh Any View plugin
+      try {
+        if (this.app.workspace.iterateAllLeaves) {
+          this.app.workspace.iterateAllLeaves((leaf) => {
+            if (leaf && leaf.view && leaf.view.render) {
+              try {
+                leaf.view.render();
+                console.log("Rendered leaf view");
+              } catch (e) {}
+            }
+            if (leaf && leaf.rebuildView) {
+              try {
+                leaf.rebuildView();
+                console.log("Rebuilt leaf via iterateAllLeaves");
+              } catch (e) {}
+            }
+          });
+        }
+      } catch (e) {
+        console.log("iterateAllLeaves error:", e);
+      }
+    }, 1000);
   }
 
   async createNewDrawio(folder) {
