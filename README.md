@@ -1,8 +1,6 @@
-# Obsidian Drawio Integration
+# 最好的 Obsidian 画图插件！支持 Drawio 桌面版无缝集成，SVG 实时预览，编辑保存自动刷新 - 让你专注于创作，无需繁琐操作。
 
 中文 | [English](./README_EN.md)
-
-在 Obsidian 中创建和编辑 Draw.io 图表，支持 SVG 预览和自动刷新。
 
 ## 功能特性
 
