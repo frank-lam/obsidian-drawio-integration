@@ -46,13 +46,13 @@ class ConfirmModal extends e.Modal {
     
     const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
     
-    buttonContainer.createEl("button", { text: "Delete", cls: "mod-danger" })
+    buttonContainer.createEl("button", { text: "删除", cls: "mod-warning" })
       .addEventListener("click", () => {
         this.close();
         this.onConfirm();
       });
     
-    buttonContainer.createEl("button", { text: "Cancel", cls: "mod-warning" })
+    buttonContainer.createEl("button", { text: "取消", cls: "mod-danger" })
       .addEventListener("click", () => {
         this.close();
       });
