@@ -57,13 +57,15 @@ class DrawioIntegration extends e.Plugin {
         if (file instanceof e.TFolder) {
           menu.addItem((item) => {
             item
-              .setTitle("New Drawio")
-              .setIcon("document")
+              .setTitle("Insert New Drawio")
+              .setIcon("plus")
               .onClick(() => this.createNewDrawio(file));
           });
         }
         
         if (file instanceof e.TFile && file.extension === "svg") {
+          menu.addSeparator();
+          
           menu.addItem((item) => {
             item
               .setTitle("Edit Drawio")
@@ -81,11 +83,15 @@ class DrawioIntegration extends e.Plugin {
             item
               .setTitle(hasXml ? "Delete Drawio (svg + drawio)" : "Delete Drawio (svg only)")
               .setIcon("trash")
+              .setWarning()
               .onClick(async () => {
+                const isMac = process.platform === "darwin";
                 if (hasXml) {
-                  const msg = `将删除 SVG 和 drawio 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
-                  const confirmed = confirm(msg);
-                  if (!confirmed) return;
+                  if (isMac) {
+                    const msg = `将删除 SVG 和 drawio 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
+                    const confirmed = confirm(msg);
+                    if (!confirmed) return;
+                  }
                   const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
                   if (xmlFile) {
                     await this.app.vault.delete(xmlFile);
@@ -106,6 +112,7 @@ class DrawioIntegration extends e.Plugin {
                 }
 
                 await this.app.vault.delete(file);
+                new e.Notice(`已删除: ${file.name}${hasXml ? ' 和 ' + xmlFileName : ''}`);
               });
           });
         }
