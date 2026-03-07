@@ -1,5 +1,6 @@
 "use strict";
 var e = require("obsidian");
+const pathUtil = require("path");
 var child_process = require("child_process");
 var fs = require("fs");
 
@@ -24,6 +25,28 @@ const SVG_PLACEHOLDER = `<?xml version="1.0" encoding="UTF-8"?>
 </svg>`;
 
 class DrawioIntegration extends e.Plugin {
+  // Minimal Windows draw.io path detector
+  detectDrawioPath() {
+    try {
+      const { execSync } = require("child_process");
+      const stdout = execSync("where draw.io.exe", { stdio: "pipe" }).toString();
+      const lines = stdout.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+      for (const line of lines) {
+        const p = pathUtil.normalize(line);
+        if (fs.existsSync(p)) return p;
+      }
+    } catch (err) {
+      // ignore
+    }
+    const candidates = [
+      pathUtil.normalize(process.env.LOCALAPPDATA + "\\draw.io\\draw.io.exe"),
+      pathUtil.normalize(process.env.PROGRAMFILES + "\\draw.io\\draw.io.exe"),
+      pathUtil.normalize(process.env["PROGRAMFILES(X86)"] + "\\draw.io\\draw.io.exe")
+    ];
+    for (const c of candidates) if (c && fs.existsSync(c)) return c;
+    return null;
+  }
+  // (removed duplicate detectDrawioPath)
   async onload() {
     this.fileChangeTimers = new Map();
     this.lastModifiedTimes = new Map();
@@ -111,9 +134,15 @@ class DrawioIntegration extends e.Plugin {
   }
 
   async handleSvgRename(svgFile, oldPath) {
-    const oldXmlPath = oldPath.replace(".svg", XML_SUFFIX + ".xml");
     const newBaseName = svgFile.basename;
-    const newXmlPath = oldPath.replace(/\/[^/]+$/, "/" + newBaseName + XML_SUFFIX + ".xml");
+    const newPath = svgFile.path;
+    
+    // Calculate old and new XML paths correctly
+    const oldXmlPath = oldPath.replace(/\.svg$/i, XML_SUFFIX + ".xml");
+    const newXmlPath = newPath.replace(/\.svg$/i, XML_SUFFIX + ".xml");
+    
+    console.log(`[Drawio] handleSvgRename: oldPath=${oldPath}, newPath=${newPath}`);
+    console.log(`[Drawio] handleSvgRename: oldXmlPath=${oldXmlPath}, newXmlPath=${newXmlPath}`);
     
     const oldXmlFile = this.app.vault.getAbstractFileByPath(oldXmlPath);
     const newXmlFile = this.app.vault.getAbstractFileByPath(newXmlPath);
@@ -125,6 +154,8 @@ class DrawioIntegration extends e.Plugin {
       } catch (err) {
         console.error("重命名XML失败:", err);
       }
+    } else if (!oldXmlFile) {
+      console.log(`[Drawio] Old XML file not found at ${oldXmlPath}`);
     }
   }
 
@@ -186,7 +217,12 @@ class DrawioIntegration extends e.Plugin {
         drawioCmd = "/Applications/draw.io.app/Contents/MacOS/draw.io";
         drawioArgs = ["-x", "-f", "svg", "-o", svgFullPath, xmlFullPath];
       } else {
-        drawioCmd = basePath + "/draw.io.exe";
+        const detected = this.detectDrawioPath();
+        if (detected) {
+          drawioCmd = detected;
+        } else {
+          drawioCmd = basePath + "/draw.io.exe";
+        }
         drawioArgs = ["-x", "-f", "svg", "-o", svgFullPath, xmlFullPath];
       }
 
@@ -222,6 +258,18 @@ class DrawioIntegration extends e.Plugin {
     const svgPath = svgFile.path;
     
     setTimeout(() => {
+      // Method 1: Use activeLeaf.rebuildView() like Refresh Any View plugin
+      try {
+        const activeLeaf = this.app.workspace.activeLeaf;
+        if (activeLeaf && typeof activeLeaf.rebuildView === "function") {
+          activeLeaf.rebuildView();
+          console.log("Refreshed via activeLeaf.rebuildView()");
+        }
+      } catch (e) {
+        console.log("activeLeaf.rebuildView error:", e);
+      }
+      
+      // Method 2: Refresh all leaves using their rebuildView method
       let leaves = [];
       if (Array.isArray(this.app.workspace.leaves)) {
         leaves = this.app.workspace.leaves;
@@ -230,30 +278,60 @@ class DrawioIntegration extends e.Plugin {
       }
       
       for (const leaf of leaves) {
-        const container = leaf.containerEl;
-        if (!container) continue;
+        if (!leaf) continue;
         
-        const images = container.querySelectorAll('img, svg');
+        // Try rebuildView on each leaf
+        if (leaf.rebuildView) {
+          try {
+            leaf.rebuildView();
+            console.log("Refreshed leaf via rebuildView");
+          } catch (e) {
+            // ignore
+          }
+        }
+        
+        // Also try view.rebuild if it exists
+        if (leaf.view && leaf.view.rebuild) {
+          try {
+            leaf.view.rebuild();
+            console.log("Refreshed view via rebuild");
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
+      
+      // Method 3: Refresh individual images by modifying src
+      for (const leaf of leaves) {
+        if (!leaf || !leaf.containerEl) continue;
+        
+        const container = leaf.containerEl;
+        const images = container.querySelectorAll('img');
         images.forEach(img => {
           try {
-            const src = img.src || (img.outerHTML && img.outerHTML.match(/src="([^"]+)"/)?.[1]);
+            const src = img.getAttribute('src');
             if (src) {
               const decodedSrc = decodeURIComponent(src);
-              if (decodedSrc.includes(svgPath)) {
+              if (decodedSrc.includes(svgPath) || decodedSrc.includes(svgPath.replace(/\//g, '\\'))) {
                 const separator = src.includes("?") ? "&" : "?";
                 const baseUrl = src.split("?")[0];
                 img.src = baseUrl + separator + "v=" + Date.now();
-                console.log("Refreshed SVG image:", img.src);
+                console.log("Refreshed img src:", img.src);
               }
             }
           } catch (e) {
-            console.log("Refresh error:", e);
+            // ignore
           }
         });
       }
       
-      this.app.metadataCache.trigger(this.app, svgFile);
-      console.log("SVG refresh triggered for:", svgPath);
+      // Method 4: Update workspace options
+      try {
+        this.app.workspace.updateOptions();
+        console.log("Updated workspace options");
+      } catch (e) {
+        console.log("updateOptions error:", e);
+      }
     }, 500);
   }
 
@@ -318,20 +396,42 @@ class DrawioIntegration extends e.Plugin {
   async editDrawio(svgFile) {
     const baseName = svgFile.basename;
     const folder = svgFile.parent;
-    const xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.xml` : `${folder.path}/${baseName}${XML_SUFFIX}.xml`;
+    let xmlPath = folder.path === "/" ? `/${baseName}${XML_SUFFIX}.xml` : `${folder.path}/${baseName}${XML_SUFFIX}.xml`;
+    
+    console.log(`[Drawio] editDrawio: svgFile.path=${svgFile.path}, baseName=${baseName}, folder.path=${folder.path}, xmlPath=${xmlPath}`);
     
     let xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
     
     if (!xmlFile) {
+      // Try to find the xml file by scanning vault files
+      console.log(`[Drawio] xml not found at ${xmlPath}, scanning vault...`);
+      const allFiles = this.app.vault.getFiles();
+      const xmlFileName = baseName + XML_SUFFIX + ".xml";
+      for (const f of allFiles) {
+        if (f.name === xmlFileName && f.extension === "xml") {
+          console.log(`[Drawio] Found xml file by name: ${f.path}`);
+          xmlFile = f;
+          xmlPath = f.path;
+          break;
+        }
+      }
+    }
+    
+    if (!xmlFile) {
+      console.log(`[Drawio] Creating xml file at ${xmlPath}`);
       try {
         await this.app.vault.create(xmlPath, DRAWIO_TEMPLATE);
         xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
       } catch (err) {
         console.error("Error creating xml:", err);
+        if (err && (typeof err.message === "string" && err.message.includes("File already exists") || (err.code && err.code === "EEXIST"))) {
+          xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
+        }
       }
     }
     
     if (!xmlFile) {
+      console.error("[Drawio] Still cannot access xml file!");
       new e.Notice("Cannot access xml file!");
       return;
     }
@@ -402,12 +502,34 @@ class DrawioIntegration extends e.Plugin {
         const cmd = `drawio "${xmlPath}" || diagramsnet "${xmlPath}"`;
         child_process.exec(cmd, cleanupBkp);
       } else {
+        // Windows: try auto-detected path first
+        const detectedPath = this.detectDrawioPath();
+        if (detectedPath) {
+          try {
+            await runDrawio(detectedPath, [xmlPath]);
+            return;
+          } catch (e) {
+            // fall through to fallback paths
+          }
+        }
+
+        // Fallback: known locations / PATH
+        try {
+          const { execSync } = require('child_process');
+          const found = execSync('where draw.io.exe', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().split(/\r?\n/)[0];
+          if (found && fs.existsSync(found)) {
+            await runDrawio(found, [xmlPath]);
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+
         const paths = [
           `${process.env.LOCALAPPDATA}\\draw.io\\draw.io.exe`,
           `${process.env.PROGRAMFILES}\\draw.io\\draw.io.exe`,
           "drawio"
         ];
-        
         let success = false;
         for (const exePath of paths) {
           if (fs.existsSync(exePath)) {
@@ -420,7 +542,6 @@ class DrawioIntegration extends e.Plugin {
             }
           }
         }
-        
         if (!success) {
           const cmd = `start "" "https://app.diagrams.net/?embed=1&xml=${encodeURIComponent(xmlPath)}"`;
           child_process.exec(cmd);
