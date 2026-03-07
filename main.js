@@ -24,6 +24,41 @@ const SVG_PLACEHOLDER = `<?xml version="1.0" encoding="UTF-8"?>
   <text x="200" y="112.5" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#666">Click "Edit Drawio" to edit</text>
 </svg>`;
 
+class ConfirmModal extends e.Modal {
+  constructor(app, title, file1, file2, onConfirm) {
+    super(app);
+    this.title = title;
+    this.file1 = file1;
+    this.file2 = file2;
+    this.onConfirm = onConfirm;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: this.title });
+    
+    const msgDiv = contentEl.createDiv();
+    msgDiv.createEl("p", { text: "将删除以下文件：" });
+    msgDiv.createEl("ul");
+    msgDiv.lastChild.createEl("li", { text: this.file1 });
+    msgDiv.lastChild.createEl("li", { text: this.file2 });
+    msgDiv.createEl("p", { text: "取消则不删除任何文件。" });
+    
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
+    
+    buttonContainer.createEl("button", { text: "Delete", cls: "mod-danger" })
+      .addEventListener("click", () => {
+        this.close();
+        this.onConfirm();
+      });
+    
+    buttonContainer.createEl("button", { text: "Cancel", cls: "mod-warning" })
+      .addEventListener("click", () => {
+        this.close();
+      });
+  }
+}
+
 class DrawioIntegration extends e.Plugin {
   // Minimal Windows draw.io path detector
   detectDrawioPath() {
@@ -85,34 +120,36 @@ class DrawioIntegration extends e.Plugin {
               .setIcon("trash")
               .setWarning()
               .onClick(async () => {
-                const isMac = process.platform === "darwin";
-                if (hasXml) {
-                  if (isMac) {
-                    const msg = `将删除 SVG 和 drawio 文件，文件如下：\n- ${file.name}\n- ${xmlFileName}\n\n取消则不删除任何文件。`;
-                    const confirmed = confirm(msg);
-                    if (!confirmed) return;
-                  }
-                  const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
-                  if (xmlFile) {
-                    await this.app.vault.delete(xmlFile);
-                  }
-                }
-
-                const svgBaseName = file.basename;
-                const allFiles = this.app.vault.getFiles();
-                for (const mdFile of allFiles) {
-                  if (mdFile.extension === "md") {
-                    let content = await this.app.vault.read(mdFile);
-                    const originalContent = content;
-                    content = content.replace(new RegExp(`!\\[\\]\\([^\\)]*${svgBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.svg\\)`, 'g'), '');
-                    if (content !== originalContent) {
-                      await this.app.vault.modify(mdFile, content);
+                const doDelete = async () => {
+                  if (hasXml) {
+                    const xmlFile = this.app.vault.getAbstractFileByPath(xmlPath);
+                    if (xmlFile) {
+                      await this.app.vault.delete(xmlFile);
                     }
                   }
-                }
 
-                await this.app.vault.delete(file);
-                new e.Notice(`已删除: ${file.name}${hasXml ? ' 和 ' + xmlFileName : ''}`);
+                  const svgBaseName = file.basename;
+                  const allFiles = this.app.vault.getFiles();
+                  for (const mdFile of allFiles) {
+                    if (mdFile.extension === "md") {
+                      let content = await this.app.vault.read(mdFile);
+                      const originalContent = content;
+                      content = content.replace(new RegExp(`!\\[\\]\\([^\\)]*${svgBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.svg\\)`, 'g'), '');
+                      if (content !== originalContent) {
+                        await this.app.vault.modify(mdFile, content);
+                      }
+                    }
+                  }
+
+                  await this.app.vault.delete(file);
+                  new e.Notice(`已删除: ${file.name}${hasXml ? ' 和 ' + xmlFileName : ''}`);
+                };
+
+                if (hasXml) {
+                  new ConfirmModal(this.app, "确认删除", file.name, xmlFileName, doDelete).open();
+                } else {
+                  await doDelete();
+                }
               });
           });
         }
