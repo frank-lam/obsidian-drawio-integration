@@ -1,4 +1,6 @@
-# The Best Obsidian Drawing Plugin! Drawio desktop integration, real-time SVG preview, auto-refresh on save - focus on creating without the hassle.
+# Obsidian Drawio Integration
+
+The Best Obsidian Drawing Plugin! Drawio desktop integration, real-time SVG preview, auto-refresh on save - focus on creating without the hassle.
 
 [中文](./README.md) | English
 
